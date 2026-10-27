@@ -95,9 +95,7 @@ else:
     df_agrupado["VALORIZAÇÃO"] = (
         df_agrupado["VALOR_TOTAL_MERCADO"] / df_agrupado["TOTAL_NEGOCIADO"]
     ) - 1
-    df_agrupado["VARIAÇÃO REAL"] = (
-        df_agrupado["VALORIZAÇÃO"] * 0.1
-    )  # Ajuste ou proporção conforme sua regra da planilha
+    df_agrupado["VARIAÇÃO REAL"] = df_agrupado["VALORIZAÇÃO"] * 0.1
 
     # Renomeando colunas para bater com o padrão visual
     df_tabela = df_agrupado.rename(
@@ -121,27 +119,30 @@ else:
         return f"color: {color}; font-weight: bold;"
       return ""
 
-    # Aplicando o Styler na tabela
-    tabela_estilizada = (
-        df_tabela.style.format({
-            "COTAS": "{:,.0f}",
-            "PREÇO NEGOCIADO": "R$ {:,.2f}",
-            "PREÇO MERCADO": "R$ {:,.2f}",
-            "TOTAL NEGOCIADO": "R$ {:,.2f}",
-            "TOTAL MERCADO": "R$ {:,.2f}",
-            "GANHO/PERDA": "R$ {:,.2f}",
-            "VALORIZAÇÃO": "{:.2%}",
-            "VARIAÇÃO REAL": "{:.2%}",
-        })
-        .applymap(
-            color_picker,
-            subset=["GANHO/PERDA", "VALORIZAÇÃO", "VARIAÇÃO REAL"],
-        )
-    )
+    # Formatando a tabela
+    tabela_formatada = df_tabela.style.format({
+        "COTAS": "{:,.0f}",
+        "PREÇO NEGOCIADO": "R$ {:,.2f}",
+        "PREÇO MERCADO": "R$ {:,.2f}",
+        "TOTAL NEGOCIADO": "R$ {:,.2f}",
+        "TOTAL MERCADO": "R$ {:,.2f}",
+        "GANHO/PERDA": "R$ {:,.2f}",
+        "VALORIZAÇÃO": "{:.2%}",
+        "VARIAÇÃO REAL": "{:.2%}",
+    })
+
+    # Aplicação compatível com versões novas e antigas do Pandas (.map ou .applymap)
+    sub_cols = ["GANHO/PERDA", "VALORIZAÇÃO", "VARIAÇÃO REAL"]
+    if hasattr(tabela_formatada, "map"):
+      tabela_estilizada = tabela_formatada.map(color_picker, subset=sub_cols)
+    else:
+      tabela_estilizada = tabela_formatada.applymap(
+          color_picker, subset=sub_cols
+      )
 
     st.dataframe(tabela_estilizada, use_container_width=True)
 
-    # Cartões de Resumo (KPIs) com lógica de cores
+    # Cartões de Resumo (KPIs)
     total_neg = df_tabela["TOTAL NEGOCIADO"].sum()
     total_merc = df_tabela["TOTAL MERCADO"].sum()
     ganho_geral = df_tabela["GANHO/PERDA"].sum()
@@ -150,7 +151,6 @@ else:
     col1.metric("Total Negociado", f"R$ {total_neg:,.2f}")
     col2.metric("Total no Mercado", f"R$ {total_merc:,.2f}")
 
-    # Exibindo métrica com cor dinâmica no delta
     cor_delta = "normal" if ganho_geral >= 0 else "inverse"
     col3.metric(
         "Ganho / Perda Total",
