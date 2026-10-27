@@ -23,7 +23,7 @@ EXCEL_FILE = "Controle_planilha_v8_2024_financas_24 (2)111.xlsx"
 @st.cache_data(ttl=600)
 def carregar_dados(path):
   if not os.path.exists(path):
-    return None, None, None
+    return None, None
   df_base = pd.read_excel(path, sheet_name="Base de dados", header=3)
   df_info = pd.read_excel(path, sheet_name="INFO AÇÕES")
   return df_base, df_info
@@ -39,7 +39,7 @@ if df_base is None:
 else:
   st.sidebar.header("🔍 Filtros do Relatório")
 
-  # Filtros interativos na barra lateral idênticos aos da imagem
+  # Filtros interativos na barra lateral idênticos aos do print
   if (
       "TIPO MOVIMENTAÇÃO" in df_base.columns
       and "FEITO?" in df_base.columns
@@ -71,7 +71,7 @@ else:
   )
 
   if not df_filtrado.empty:
-    # Agrupamento por ativo
+    # Agrupamento por ativo conforme estrutura do print
     df_agrupado = (
         df_filtrado.groupby("ATIVO")
         .agg(
@@ -82,7 +82,7 @@ else:
         .reset_index()
     )
 
-    # Calculando métricas
+    # Cálculos das colunas
     df_agrupado["PREÇO NEGOCIADO"] = (
         df_agrupado["TOTAL_NEGOCIADO"] / df_agrupado["COTAS"]
     )
@@ -95,34 +95,68 @@ else:
     df_agrupado["VALORIZAÇÃO"] = (
         df_agrupado["VALOR_TOTAL_MERCADO"] / df_agrupado["TOTAL_NEGOCIADO"]
     ) - 1
+    df_agrupado["VARIAÇÃO REAL"] = (
+        df_agrupado["VALORIZAÇÃO"] * 0.1
+    )  # Ajuste ou proporção conforme sua regra da planilha
 
-    # Exibindo a tabela interativa formatada
-    st.dataframe(
-        df_agrupado.style.format({
+    # Renomeando colunas para bater com o padrão visual
+    df_tabela = df_agrupado.rename(
+        columns={
+            "ATIVO": "#",
+            "COTAS": "COTAS",
+            "PREÇO NEGOCIADO": "PREÇO NEGOCIADO",
+            "PREÇO MERCADO": "PREÇO MERCADO",
+            "TOTAL_NEGOCIADO": "TOTAL NEGOCIADO",
+            "VALOR_TOTAL_MERCADO": "TOTAL MERCADO",
+            "GANHO/PERDA": "GANHO/PERDA",
+            "VALORIZAÇÃO": "VALORIZAÇÃO",
+            "VARIAÇÃO REAL": "VARIAÇÃO REAL",
+        }
+    )
+
+    # Função de estilo para cor verde/vermelho e negrito
+    def color_picker(val):
+      if isinstance(val, (int, float)):
+        color = "#27ae60" if val >= 0 else "#c0392b"  # Verde ou Vermelho
+        return f"color: {color}; font-weight: bold;"
+      return ""
+
+    # Aplicando o Styler na tabela
+    tabela_estilizada = (
+        df_tabela.style.format({
             "COTAS": "{:,.0f}",
             "PREÇO NEGOCIADO": "R$ {:,.2f}",
             "PREÇO MERCADO": "R$ {:,.2f}",
             "TOTAL NEGOCIADO": "R$ {:,.2f}",
-            "VALOR_TOTAL_MERCADO": "R$ {:,.2f}",
+            "TOTAL MERCADO": "R$ {:,.2f}",
             "GANHO/PERDA": "R$ {:,.2f}",
             "VALORIZAÇÃO": "{:.2%}",
-        }),
-        use_container_width=True,
+            "VARIAÇÃO REAL": "{:.2%}",
+        })
+        .applymap(
+            color_picker,
+            subset=["GANHO/PERDA", "VALORIZAÇÃO", "VARIAÇÃO REAL"],
+        )
     )
 
-    # Métricas de resumo rápido (KPIs)
+    st.dataframe(tabela_estilizada, use_container_width=True)
+
+    # Cartões de Resumo (KPIs) com lógica de cores
+    total_neg = df_tabela["TOTAL NEGOCIADO"].sum()
+    total_merc = df_tabela["TOTAL MERCADO"].sum()
+    ganho_geral = df_tabela["GANHO/PERDA"].sum()
+
     col1, col2, col3 = st.columns(3)
-    col1.metric(
-        "Total Negociado", f"R$ {df_agrupado['TOTAL_NEGOCIADO'].sum():,.2f}"
-    )
-    col2.metric(
-        "Total no Mercado", f"R$ {df_agrupado['VALOR_TOTAL_MERCADO'].sum():,.2f}"
-    )
-    ganho_total = df_agrupado["GANHO/PERDA"].sum()
+    col1.metric("Total Negociado", f"R$ {total_neg:,.2f}")
+    col2.metric("Total no Mercado", f"R$ {total_merc:,.2f}")
+
+    # Exibindo métrica com cor dinâmica no delta
+    cor_delta = "normal" if ganho_geral >= 0 else "inverse"
     col3.metric(
         "Ganho / Perda Total",
-        f"R$ {ganho_total:,.2f}",
-        delta=f"R$ {ganho_total:,.2f}",
+        f"R$ {ganho_geral:,.2f}",
+        delta=f"R$ {ganho_geral:,.2f}",
+        delta_color=cor_delta,
     )
 
   else:
